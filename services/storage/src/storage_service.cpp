@@ -7,7 +7,10 @@
 namespace aether {
 
 StorageService::StorageService(std::unique_ptr<DiskManager> disk_manager, uint16_t port)
-    : disk_manager_(std::move(disk_manager)), port_(port), is_running_(false) {}
+    : disk_manager_(std::move(disk_manager)), port_(port), is_running_(false) {
+    replacer_ = std::make_unique<LRUReplacer>(128);
+    buffer_pool_manager_ = std::make_unique<BufferPoolManager>(128, disk_manager_.get(), replacer_.get());
+}
 
 StorageService::~StorageService() {
     Stop();
@@ -56,6 +59,11 @@ void StorageService::Stop() {
     is_running_ = false;
     server_socket_.Close();
     
+    if (buffer_pool_manager_) {
+        buffer_pool_manager_->FlushAllPages();
+        buffer_pool_manager_.reset();
+    }
+    
     if (disk_manager_) {
         disk_manager_->Close();
     }
@@ -75,18 +83,25 @@ void StorageService::HandleClient(Socket client_socket) {
 
             if (header.op_type == static_cast<uint8_t>(protocol::OpType::READ_PAGE)) {
                 page_id_t page_id = header.page_id;
-                char buffer[PAGE_SIZE];
                 protocol::ResponseHeader resp;
                 resp.page_id = page_id;
 
                 try {
-                    disk_manager_->ReadPage(page_id, buffer);
+                    Page *page = buffer_pool_manager_->FetchPage(page_id);
+                    if (page == nullptr) {
+                        throw std::runtime_error("Failed to fetch page from buffer pool");
+                    }
                     resp.status = static_cast<uint8_t>(protocol::StatusCode::SUCCESS);
                     resp.data_len = PAGE_SIZE;
 
-                    if (client_socket.Send(&resp, sizeof(resp)) && 
-                        client_socket.Send(buffer, PAGE_SIZE)) {
-                        spdlog::debug("Served READ_PAGE for page_id {}", page_id);
+                    bool send_success = client_socket.Send(&resp, sizeof(resp)) && 
+                                        client_socket.Send(page->GetData(), PAGE_SIZE);
+
+                    // Always unpin the page after reading its contents
+                    buffer_pool_manager_->UnpinPage(page_id, false);
+
+                    if (send_success) {
+                        spdlog::debug("Served READ_PAGE for page_id {} via buffer pool", page_id);
                     } else {
                         spdlog::error("Failed to send READ_PAGE response to client");
                         break;
@@ -111,10 +126,16 @@ void StorageService::HandleClient(Socket client_socket) {
                 }
 
                 try {
-                    disk_manager_->WritePage(page_id, buffer);
+                    Page *page = buffer_pool_manager_->FetchPage(page_id);
+                    if (page == nullptr) {
+                        throw std::runtime_error("Failed to fetch page from buffer pool for write");
+                    }
+                    std::memcpy(page->GetData(), buffer, PAGE_SIZE);
+                    buffer_pool_manager_->UnpinPage(page_id, true); // Mark as dirty
+
                     resp.status = static_cast<uint8_t>(protocol::StatusCode::SUCCESS);
                     if (client_socket.Send(&resp, sizeof(resp))) {
-                        spdlog::debug("Served WRITE_PAGE for page_id {}", page_id);
+                        spdlog::debug("Served WRITE_PAGE for page_id {} via buffer pool", page_id);
                     } else {
                         break;
                     }
@@ -129,11 +150,18 @@ void StorageService::HandleClient(Socket client_socket) {
                 resp.data_len = 0;
 
                 try {
-                    page_id_t new_page_id = disk_manager_->AllocatePage();
+                    page_id_t new_page_id = INVALID_PAGE_ID;
+                    Page *page = buffer_pool_manager_->NewPage(&new_page_id);
+                    if (page == nullptr) {
+                        throw std::runtime_error("Failed to allocate new page in buffer pool");
+                    }
+                    // A newly allocated page must be marked dirty so its blank frame eventually flushes to disk
+                    buffer_pool_manager_->UnpinPage(new_page_id, true);
+
                     resp.status = static_cast<uint8_t>(protocol::StatusCode::SUCCESS);
                     resp.page_id = new_page_id;
                     if (client_socket.Send(&resp, sizeof(resp))) {
-                        spdlog::debug("Served ALLOCATE_PAGE, returned page_id {}", new_page_id);
+                        spdlog::debug("Served ALLOCATE_PAGE via buffer pool, returned page_id {}", new_page_id);
                     } else {
                         break;
                     }
@@ -151,10 +179,13 @@ void StorageService::HandleClient(Socket client_socket) {
                 resp.data_len = 0;
 
                 try {
-                    disk_manager_->DeallocatePage(page_id);
+                    bool success = buffer_pool_manager_->DeletePage(page_id);
+                    if (!success) {
+                        throw std::runtime_error("Failed to delete page from buffer pool (page might be pinned)");
+                    }
                     resp.status = static_cast<uint8_t>(protocol::StatusCode::SUCCESS);
                     if (client_socket.Send(&resp, sizeof(resp))) {
-                        spdlog::debug("Served DEALLOCATE_PAGE for page_id {}", page_id);
+                        spdlog::debug("Served DEALLOCATE_PAGE for page_id {} via buffer pool", page_id);
                     } else {
                         break;
                     }

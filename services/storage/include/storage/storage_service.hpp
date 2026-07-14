@@ -1,6 +1,8 @@
 #pragma once
 
 #include "storage/disk_manager.hpp"
+#include "storage/replacer.hpp"
+#include "storage/buffer_pool_manager.hpp"
 #include "common/socket.hpp"
 #include "common/concurrency.hpp"
 #include <memory>
@@ -28,6 +30,8 @@ private:
     void HandleClient(Socket client_socket);
 
     std::unique_ptr<DiskManager> disk_manager_;
+    std::unique_ptr<Replacer> replacer_;
+    std::unique_ptr<BufferPoolManager> buffer_pool_manager_;
     uint16_t port_;
     ServerSocket server_socket_;
     std::atomic<bool> is_running_;

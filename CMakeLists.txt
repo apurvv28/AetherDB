@@ -26,6 +26,8 @@ endif()
 # Storage Service daemon executable
 add_executable(aether-storage-service
   services/storage/src/disk_manager.cpp
+  services/storage/src/replacer.cpp
+  services/storage/src/buffer_pool_manager.cpp
   services/storage/src/storage_service.cpp
   services/storage/main.cpp
 )
@@ -55,3 +57,22 @@ if(WIN32)
 endif()
 
 add_test(NAME disk_manager_test COMMAND disk_manager_test)
+
+add_executable(buffer_pool_manager_test
+  tests/storage/buffer_pool_manager_test.cpp
+  services/storage/src/disk_manager.cpp
+  services/storage/src/replacer.cpp
+  services/storage/src/buffer_pool_manager.cpp
+)
+
+target_include_directories(buffer_pool_manager_test PRIVATE
+  services/storage/include
+  common/include
+  tests
+)
+
+if(WIN32)
+  target_link_libraries(buffer_pool_manager_test PRIVATE ws2_32)
+endif()
+
+add_test(NAME buffer_pool_manager_test COMMAND buffer_pool_manager_test)
