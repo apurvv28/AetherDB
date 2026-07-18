@@ -29,11 +29,11 @@ Below is the status of each implementation stage of AetherDB:
 * [x] **Phase 1 — Disk Manager & Page Layout**
   * *Status*: **Completed**
   * *Description*: Implemented the raw database file coordinator (`DiskManager`) slicing the storage file into fixed-size 4KB pages. Managed deleted pages via a disk-linked free-list stack to prevent file bloat. Bound the storage engine to a multi-threaded TCP server daemon (`AetherStorage`) speaking a custom binary request/response wire protocol.
-* [ ] **Phase 2 — Buffer Pool Manager**
+* [x] **Phase 2 — Buffer Pool Manager**
   * *Description*: Add an in-memory page frame cache (buffer pool) sitting on top of the storage engine. Implement Clock or LRU page eviction to minimize disk read/write cycles.
-* [ ] **Phase 3 — B+ Tree Index**
+* [x] **Phase 3 — B+ Tree Index**
   * *Description*: Implement a disk-backed B+ tree index spanning internal routing pages and leaf data pages, enabling fast $O(\log N)$ point and range lookups.
-* [ ] **Phase 4 — Slotted-Page Record Storage & Catalog**
+* [x] **Phase 4 — Slotted-Page Record Storage & Catalog**
   * *Description*: Implement a slotted-page architecture to store variable-length records (VARCHARs, etc.) inside the 4KB pages, and create the schema catalog tracking tables and columns.
 * [ ] **Phase 5 — Write-Ahead Log (WAL) & Crash Recovery**
   * *Description*: Build the log service daemon appending log records to disk, enforcing the Write-Ahead Logging rule, and running ARIES-style analysis, redo, and undo recovery passes after crashes.

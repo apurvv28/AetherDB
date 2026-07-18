@@ -37,7 +37,7 @@ public:
 private:
     friend class BufferPoolManager;
 
-    char data_[PAGE_SIZE];
+    alignas(8) char data_[PAGE_SIZE];
     page_id_t page_id_{INVALID_PAGE_ID};
     int pin_count_{0};
     bool is_dirty_{false};

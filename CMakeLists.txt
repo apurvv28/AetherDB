@@ -29,6 +29,7 @@ add_executable(aether-storage-service
   services/storage/src/replacer.cpp
   services/storage/src/buffer_pool_manager.cpp
   services/storage/src/storage_service.cpp
+  services/storage/src/b_plus_tree.cpp
   services/storage/main.cpp
 )
 
@@ -76,3 +77,44 @@ if(WIN32)
 endif()
 
 add_test(NAME buffer_pool_manager_test COMMAND buffer_pool_manager_test)
+
+add_executable(b_plus_tree_test
+  tests/storage/b_plus_tree_test.cpp
+  services/storage/src/disk_manager.cpp
+  services/storage/src/replacer.cpp
+  services/storage/src/buffer_pool_manager.cpp
+  services/storage/src/b_plus_tree.cpp
+)
+
+target_include_directories(b_plus_tree_test PRIVATE
+  services/storage/include
+  common/include
+  tests
+)
+
+if(WIN32)
+  target_link_libraries(b_plus_tree_test PRIVATE ws2_32)
+endif()
+
+add_test(NAME b_plus_tree_test COMMAND b_plus_tree_test)
+
+add_executable(table_page_test
+  tests/storage/table_page_test.cpp
+  services/storage/src/disk_manager.cpp
+  services/storage/src/replacer.cpp
+  services/storage/src/buffer_pool_manager.cpp
+)
+
+target_include_directories(table_page_test PRIVATE
+  services/storage/include
+  common/include
+  tests
+)
+
+if(WIN32)
+  target_link_libraries(table_page_test PRIVATE ws2_32)
+endif()
+
+add_test(NAME table_page_test COMMAND table_page_test)
+
+
